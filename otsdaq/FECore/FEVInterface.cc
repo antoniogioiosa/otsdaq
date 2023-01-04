@@ -42,6 +42,8 @@ FEVInterface::~FEVInterface(void)
 //==============================================================================
 void FEVInterface::configureSlowControls(void)
 {
+	__COUT__ << "configureSlowControls" << __E__;
+
 	// Start artdaq metric manager here, if possible
 	if(metricMan && !metricMan->Running() && metricMan->Initialized())
 	{
@@ -553,6 +555,17 @@ void FEVInterface::registerFEMacroFunction(const std::string&              feMac
                                            const std::vector<std::string>& namesOfInputArgs,
                                            const std::vector<std::string>& namesOfOutputArgs,
                                            uint8_t                         requiredUserPermissions,
+                                           const std::string&              allowedCallingFEs,
+                                           const std::string&              feMacroTooltip)
+{
+	registerFEMacroFunction(feMacroName,feMacroFunction,namesOfInputArgs,namesOfOutputArgs,
+		std::to_string(requiredUserPermissions),allowedCallingFEs,feMacroTooltip);
+}  // end registerFEMacroFunction()
+void FEVInterface::registerFEMacroFunction(const std::string&              feMacroName,
+                                           frontEndMacroFunction_t         feMacroFunction,
+                                           const std::vector<std::string>& namesOfInputArgs,
+                                           const std::vector<std::string>& namesOfOutputArgs,
+                                           const std::string&              requiredUserPermissions,
                                            const std::string&              allowedCallingFEs,
                                            const std::string&              feMacroTooltip)
 {

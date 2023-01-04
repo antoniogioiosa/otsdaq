@@ -250,7 +250,7 @@ void AllSupervisorInfo::init(xdaq::ApplicationContext* applicationContext)
 			       .second)
 			{
 				__COUT__ << "The TRACE-controller app for hostname '" << TRACEApp.second.getHostname() << "' is CLASS:LID = " << TRACEApp.second.getClass()
-				         << ":" << TRACEApp.second.getId() << __E__;
+				         << ":" << TRACEApp.second.getId() << " name = " << TRACEApp.second.getName() << __E__;
 			}
 			//			allTraceControllerSupervisorInfo_.emplace(
 			//					std::pair<unsigned int, const SupervisorInfo&>(
@@ -259,12 +259,12 @@ void AllSupervisorInfo::init(xdaq::ApplicationContext* applicationContext)
 		}
 		__COUT__ << "TRACE-controller app count = " << allTraceControllerSupervisorInfo_.size() << __E__;
 
-		for(auto& TRACEApp : allTraceControllerSupervisorInfo_)
-		{
-			__COUT__ << "The TRACE-controller for hostname = " << TRACEApp.first << "/" << TRACEApp.second.getId() << " is ..."
-			         << " name = " << TRACEApp.second.getName() << " class = " << TRACEApp.second.getClass() << " hostname = " << TRACEApp.second.getHostname()
-			         << __E__;
-		}
+		// for(auto& TRACEApp : allTraceControllerSupervisorInfo_)
+		// {
+		// 	__COUT__ << "The TRACE-controller for hostname = " << TRACEApp.first << "/" << TRACEApp.second.getId() << " is ..."
+		// 	         << " name = " << TRACEApp.second.getName() << " class = " << TRACEApp.second.getClass() << " hostname = " << TRACEApp.second.getHostname()
+		// 	         << __E__;
+		// }
 	}
 
 	SupervisorDescriptorInfoBase::destroy();
@@ -352,9 +352,9 @@ const SupervisorInfo& AllSupervisorInfo::getArtdaqSupervisorInfo(void) const
 }  // end getArtdaqSupervisorInfo()
 
 //==============================================================================
-std::vector<std::vector<const SupervisorInfo*>> AllSupervisorInfo::getOrderedSupervisorDescriptors(const std::string& stateMachineCommand) const
+std::vector<std::vector<const SupervisorInfo*>> AllSupervisorInfo::getOrderedSupervisorDescriptors(const std::string& stateMachineCommand, bool onlyGatewayContextSupervisors) const
 {
-	__COUT__ << "getOrderedSupervisorDescriptors" << __E__;
+	__COUT__ << "getOrderedSupervisorDescriptors for command " << stateMachineCommand << __E__;
 
 	std::map<uint64_t /*priority*/, std::vector<unsigned int /*appId*/>> orderedByPriority;
 
@@ -409,13 +409,18 @@ std::vector<std::vector<const SupervisorInfo*>> AllSupervisorInfo::getOrderedSup
 			if(it == allSupervisorInfo_.end())
 			{
 				__SS__ << "Error! Was AllSupervisorInfo properly initialized? The app.id_ " << priorityApp << " priority "
-				       << (unsigned int)priorityAppVector.first << " could not be found in AllSupervisorInfo." << __E__;
+				       << (unsigned int)priorityAppVector.first << " could not be found in AllSupervisorInfo. Was the Context changed? Rebooting ots may fix this issue." << __E__;
 				__SS_THROW__;
 			}
 
 			//__COUT__ << it->second.getName() << " [" << it->second.getId() << "]: " << "
 			// priority? " << 				(unsigned int)priorityAppVector.first <<
 			//__E__;
+
+
+			if(onlyGatewayContextSupervisors && 
+				it->second.getContextName() != theSupervisorInfo_->getContextName())
+				continue; //for shutdown and startup only broadcast to apps that are local to the Gateway supervisor
 
 			if(it->second.isGatewaySupervisor())
 				continue;  // skip gateway supervisor

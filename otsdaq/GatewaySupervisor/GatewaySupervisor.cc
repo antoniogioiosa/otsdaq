@@ -187,8 +187,12 @@ void GatewaySupervisor::init(void)
 //	child thread
 void GatewaySupervisor::AppStatusWorkLoop(GatewaySupervisor* theSupervisor)
 {
+	sleep(5); //wait for apps to get started
+
+	bool firstError = true;
 	std::string status, progress, detail, appName;
 	int         progressInteger;
+	bool oneStatusReqHasFailed = false;
 	while(1)
 	{
 		sleep(1);
@@ -197,6 +201,7 @@ void GatewaySupervisor::AppStatusWorkLoop(GatewaySupervisor* theSupervisor)
 		//	Loop through all Apps and request status
 		//	sleep
 
+ 		oneStatusReqHasFailed = false;
 		// __COUT__ << "Just debugging App status checking" << __E__;
 		for(const auto& it : theSupervisor->allSupervisorInfo_.getAllSupervisorInfo())
 		{
@@ -290,20 +295,44 @@ void GatewaySupervisor::AppStatusWorkLoop(GatewaySupervisor* theSupervisor)
 					detail = parameters.getValue("Detail");
 				}
 				catch(const xdaq::exception::Exception& e)
-				{
-					//__COUT__ << "Failed to send getStatus SOAP Message: " << e.what() << __E__;
+				{					
 					status   = SupervisorInfo::APP_STATUS_UNKNOWN;
 					progress = "0";
 					detail   = "SOAP Message Error";
-					sleep(5);  // sleep to not overwhelm server with errors
+					oneStatusReqHasFailed = true;
+					if(firstError) //first error, give some more time for apps to boot
+					{
+						firstError = false;
+						break;
+					}
+					__COUT__ << "Getting Status "
+									         << " Supervisor instance = '" << appInfo.getName()
+									         << "' [LID=" << appInfo.getId() << "] in Context '"
+									         << appInfo.getContextName() << "' [URL=" <<
+						 					appInfo.getURL()
+									         << "].\n\n";
+					__COUTV__(SOAPUtilities::translate(tempMessage));
+					__COUT_WARN__ << "Failed to send getStatus SOAP Message: " << e.what() << __E__;
 				}
 				catch(...)
 				{
-					//__COUT_WARN__ << "Failed to send getStatus SOAP Message due to unknown error." << __E__;
 					status   = SupervisorInfo::APP_STATUS_UNKNOWN;
 					progress = "0";
 					detail   = "Unknown SOAP Message Error";
-					sleep(5);  // sleep to not overwhelm server with errors
+					oneStatusReqHasFailed = true;
+					if(firstError) //first error, give some more time for apps to boot
+					{
+						firstError = false;
+						break;
+					}
+					__COUT__ << "Getting Status "
+									         << " Supervisor instance = '" << appInfo.getName()
+									         << "' [LID=" << appInfo.getId() << "] in Context '"
+									         << appInfo.getContextName() << "' [URL=" <<
+						 					appInfo.getURL()
+									         << "].\n\n";
+					__COUTV__(SOAPUtilities::translate(tempMessage));
+					__COUT_WARN__ << "Failed to send getStatus SOAP Message due to unknown error." << __E__;
 				}
 			}  // end with non-gateway status request handling
 
@@ -319,6 +348,8 @@ void GatewaySupervisor::AppStatusWorkLoop(GatewaySupervisor* theSupervisor)
 			theSupervisor->allSupervisorInfo_.setSupervisorStatus(appInfo, status, progressInteger, detail);
 
 		}  // end of app loop
+		if(oneStatusReqHasFailed)
+			sleep(5);  // sleep to not overwhelm server with errors
 	}      // end of infinite status checking loop
 }  // end AppStatusWorkLoop
 
@@ -1734,7 +1765,8 @@ catch(...)
 void GatewaySupervisor::transitionShuttingDown(toolbox::Event::Reference /*e*/)
 try
 {
-	__COUT__ << "Fsm current state: " << theStateMachine_.getCurrentStateName() << __E__;
+	__COUT__ << "Fsm current state: " << theStateMachine_.getCurrentStateName() << 
+		" message: " << theStateMachine_.getCurrentStateName() << __E__;
 
 	RunControlStateMachine::theProgressBar_.step();
 	makeSystemLogEntry("System shutting down.");
@@ -1751,6 +1783,9 @@ try
 		sleep(1);
 		RunControlStateMachine::theProgressBar_.step();
 	}
+
+	broadcastMessage(theStateMachine_.getCurrentMessage());
+
 }  // end transitionShuttingDown()
 catch(const xdaq::exception::Exception& e)  // due to xoap send failure
 {
@@ -1802,6 +1837,8 @@ try
 		sleep(1);
 		RunControlStateMachine::theProgressBar_.step();
 	}
+
+	broadcastMessage(theStateMachine_.getCurrentMessage());
 
 }  // end transitionStartingUp()
 catch(const xdaq::exception::Exception& e)  // due to xoap send failure
@@ -2257,6 +2294,8 @@ bool GatewaySupervisor::handleBroadcastMessageTarget(const SupervisorInfo&  appI
 		RunControlStateMachine::theProgressBar_.step();
 
 		std::string  givenAppStatus   = theStateMachine_.getCurrentTransitionName(command);
+		__COUTV__(givenAppStatus.capacity());
+
 		unsigned int givenAppProgress = appInfo.getProgress();
 		std::string  givenAppDetail   = appInfo.getDetail();
 		if(givenAppProgress >= 100)
@@ -2317,6 +2356,7 @@ bool GatewaySupervisor::handleBroadcastMessageTarget(const SupervisorInfo&  appI
 			// for transition attempt, set status for app, in case the request occupies the target app
 			reply = send(appInfo.getDescriptor(), message);
 			// then release mutex here using scope change, to allow the app to start giving its own updates
+			__COUTV__(givenAppStatus.capacity());
 		}
 		catch(const xdaq::exception::Exception& e)  // due to xoap send failure
 		{
@@ -2553,13 +2593,16 @@ void GatewaySupervisor::broadcastMessage(xoap::MessageReference message)
 
 	try
 	{
-		orderedSupervisors = allSupervisorInfo_.getOrderedSupervisorDescriptors(command);
+		orderedSupervisors = allSupervisorInfo_.getOrderedSupervisorDescriptors(command,
+			//only gateway apps for special shutdown and startup command broadcast
+			command == RunControlStateMachine::SHUTDOWN_TRANSITION_NAME ||
+			command == RunControlStateMachine::STARTUP_TRANSITION_NAME);
 	}
 	catch(const std::runtime_error& e)
 	{
 		__SS__ << "Error getting supervisor priority. Was there a change in the context?"
-		       << " Remember, if the context was changed, it is safest to relaunch "
-		          "StartOTS.sh. "
+		       << " Remember, if the context was changed, it is recommended to relaunch the "
+		          "ots script. "
 		       << e.what() << __E__;
 		XCEPT_RAISE(toolbox::fsm::exception::Exception, ss.str());
 	}
@@ -3258,14 +3301,13 @@ void GatewaySupervisor::request(xgi::Input* in, xgi::Output* out)
 
 			std::string stateMachineAliasFilter = "*";  // default to all
 
-			// IMPORTANT -- use temporary ConfigurationManager to get the Active Group Aliases, to avoid changine the Context Configuration tree for the Gateway
-			// Supervisor
+			// IMPORTANT -- use temporary ConfigurationManager to get the Active Group Aliases,
+			//	 to avoid changing the Context Configuration tree for the Gateway Supervisor
+			ConfigurationManager temporaryConfigMgr;
 			std::map<std::string /*alias*/, std::pair<std::string /*group name*/, TableGroupKey>> aliasMap;
-			{
-				ConfigurationManager temporaryConfigMgr;
-				aliasMap = temporaryConfigMgr.getActiveGroupAliases();
-			}  // end temporary scope for ConfigurationManager to get active group aliases
+			aliasMap = temporaryConfigMgr.getActiveGroupAliases();
 
+			// AND IMPORTANT -- to use ConfigurationManager to get the Context settings for the Gateway Supervisor
 			// get stateMachineAliasFilter if possible
 			ConfigurationTree configLinkNode =
 			    CorePropertySupervisorBase::theConfigurationManager_->getSupervisorTableNode(supervisorContextUID_, supervisorApplicationUID_);
@@ -3377,11 +3419,11 @@ void GatewaySupervisor::request(xgi::Input* in, xgi::Output* out)
 					xmlOut.addTextElementToData("config_alias", aliasMapPair.first);
 					xmlOut.addTextElementToData("config_key", TableGroupKey::getFullGroupString(aliasMapPair.second.first, aliasMapPair.second.second).c_str());
 
-					// __COUT__ << "config_alias_comment" << " " <<  CorePropertySupervisorBase::theConfigurationManager_->getNode(
+					// __COUT__ << "config_alias_comment" << " " <<  temporaryConfigMgr.getNode(
 					// 	ConfigurationManager::GROUP_ALIASES_TABLE_NAME).getNode(aliasMapPair.first).getNode(
 					// 		TableViewColumnInfo::COL_NAME_COMMENT).getValue<std::string>() << __E__;
 					xmlOut.addTextElementToData("config_alias_comment",
-					                            CorePropertySupervisorBase::theConfigurationManager_->getNode(ConfigurationManager::GROUP_ALIASES_TABLE_NAME)
+					                            temporaryConfigMgr.getNode(ConfigurationManager::GROUP_ALIASES_TABLE_NAME)
 					                                .getNode(aliasMapPair.first)
 					                                .getNode(TableViewColumnInfo::COL_NAME_COMMENT)
 					                                .getValue<std::string>());
@@ -3389,16 +3431,16 @@ void GatewaySupervisor::request(xgi::Input* in, xgi::Output* out)
 					std::string groupComment, groupAuthor, groupCreationTime;
 					try
 					{
-						CorePropertySupervisorBase::theConfigurationManager_->loadTableGroup(aliasMapPair.second.first,
-						                                                                     aliasMapPair.second.second,
-						                                                                     false,
-						                                                                     0,
-						                                                                     0,
-						                                                                     0,
-						                                                                     &groupComment,
-						                                                                     &groupAuthor,
-						                                                                     &groupCreationTime,
-						                                                                     true /*doNotLoadMembers*/);
+						temporaryConfigMgr.loadTableGroup(aliasMapPair.second.first,
+														aliasMapPair.second.second,
+														false,
+														0,
+														0,
+														0,
+														&groupComment,
+														&groupAuthor,
+														&groupCreationTime,
+														true /*doNotLoadMembers*/);
 
 						xmlOut.addTextElementToData("config_comment", groupComment);
 						xmlOut.addTextElementToData("config_author", groupAuthor);
@@ -3897,7 +3939,7 @@ void GatewaySupervisor::request(xgi::Input* in, xgi::Output* out)
 //	throws exception if command fails to start
 void GatewaySupervisor::launchStartOTSCommand(const std::string& command, ConfigurationManager* cfgMgr)
 {
-	__COUT__ << "launch StartOTS Command = " << command << __E__;
+	__COUT__ << "launch ots script Command = " << command << __E__;
 	__COUT__ << "Extracting target context hostnames... " << __E__;
 
 	std::vector<std::string> hostnames;
@@ -3920,7 +3962,7 @@ void GatewaySupervisor::launchStartOTSCommand(const std::string& command, Config
 				if(context.address_[i] == '/')
 					j = i + 1;
 			hostnames.push_back(context.address_.substr(j));
-			__COUT__ << "StartOTS.sh hostname = " << hostnames.back() << __E__;
+			__COUT__ << "ots script command '" << command << "' launching on hostname = " << hostnames.back() << __E__;
 		}
 	}
 	catch(...)
@@ -3962,7 +4004,7 @@ void GatewaySupervisor::launchStartOTSCommand(const std::string& command, Config
 
 			if(strcmp(line, command.c_str()) == 0)
 			{
-				__SS__ << "The command looks to have been ignored by " << hostname << ". Is StartOTS.sh still running on that node?" << __E__;
+				__SS__ << "The command looks to have been ignored by " << hostname << ". Is the ots launch script still running on that node?" << __E__;
 				__SS_THROW__;
 			}
 			__COUTV__(line);
