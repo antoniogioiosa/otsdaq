@@ -12,7 +12,7 @@ cmake_minimum_required (VERSION 3.19 FATAL_ERROR)
 
 find_package(cetmodules 3.16.00 REQUIRED)
 
-project(otsdaq VERSION 2.06.07)
+project(otsdaq VERSION 2.06.11)
 
 include(CetCMakeEnv)
 cet_cmake_env()
@@ -20,14 +20,56 @@ cet_cmake_env()
 # Find our own CMake modules, and tell everyone else where to find them.
 cet_cmake_module_directories(Modules BINARY)
 
+if (CMAKE_CXX_COMPILER_ID STREQUAL Clang AND
+     CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 14.0.0)
+  # Clang 14 has a bug in which it complains about destructors of template classes
+  # e.g. ArtdaqInput<T>::~ArtdaqInput(), when it is expecting the destructor name to
+  # match what is on the left-hand side of the ::. This is a violation, however, of
+  # the C++20 standard. https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2020/p1787r6.html
+  set(DT_FLAG -Wno-dtor-name)
+else()
+  set(DT_FLAG)
+endif()
+
 cet_set_compiler_flags(
  DIAGS 
  VIGILANT
  WERROR
  NO_UNDEFINED
- EXTRA_FLAGS -pedantic -D_LIBCPP_ENABLE_CXX17_REMOVED_FEATURES=1
+ EXTRA_FLAGS -pedantic -D_LIBCPP_ENABLE_CXX17_REMOVED_FEATURES=1 ${DT_FLAG}
  )
   
+# Debug streamer.
+string(TOUPPER ${CMAKE_BUILD_TYPE} BTYPE_UC)
+if(BTYPE_UC STREQUAL DEBUG)
+  add_definitions(-DDEBUGME)
+	if(DEFINED ENV{USE_ASAN})
+		if($ENV{USE_ASAN} GREATER 0)
+			message("!!! Address Sanitizer Activated!!!")
+			add_compile_options(-fsanitize=address -Wno-unused-command-line-argument)
+			add_link_options(-lasan)
+		endif()
+	endif()
+	if(DEFINED ENV{USE_TSAN})
+		if($ENV{USE_TSAN} GREATER 0)
+			message("!!! Thread Sanitizer Activated!!!")
+			add_compile_options(-fsanitize=thread -Wno-unused-command-line-argument -Wno-tsan)
+			add_link_options(-ltsan)
+		endif()
+	endif()
+	if(DEFINED ENV{USE_UBSAN})
+		if($ENV{USE_UBSAN} GREATER 0)
+			message("!!! Undefined Behavior Sanitizer Activated!!!")
+			add_compile_options(-fsanitize=undefined -Wno-unused-command-line-argument)
+			add_link_options(-lubsan)
+		endif()
+	endif()
+	if(DEFINED ENV{USE_GCOV})
+		add_compile_options(-fprofile-arcs -ftest-coverage --coverage)
+		add_link_options(--coverage)
+	endif()
+endif()
+
 find_package(artdaq_core 3.09.00 REQUIRED EXPORT)
 find_package(artdaq 3.12.00 REQUIRED EXPORT)
 find_package(artdaq_database 1.07.00 REQUIRED)
@@ -38,7 +80,7 @@ set(bsoncxx_DIR ${artdaq_database_DIR})
 set(mongocxx_DIR ${artdaq_database_DIR})
 find_package(mongocxx REQUIRED)
 endif()
-find_package(Boost COMPONENTS date_time program_options regex thread REQUIRED EXPORT)
+find_package(Boost QUIET COMPONENTS date_time program_options regex thread REQUIRED EXPORT)
 
  # XDAQ Extra setup
  include_directories($ENV{XDAQ_INC}/linux $ENV{XDAQ_INC})
@@ -97,10 +139,6 @@ cet_register_export_set(SET_NAME otsdaqUsers SET_DEFAULT)
 # tools
 add_subdirectory(tools)
 
-# tools
-FILE(COPY tools DESTINATION .)
-INSTALL(DIRECTORY tools DESTINATION ${product}/${version})
-
 # Documentation (to comment out if not needed DOXYGEN locally)
 if( $ENV{OTS_DOXY} MATCHES "DOIT" )
 	add_subdirectory(doc)
@@ -109,12 +147,9 @@ endif()
 # test programs
 add_subdirectory(test)
 
-# test
-FILE(COPY test DESTINATION .)
-INSTALL(DIRECTORY test DESTINATION ${product}/${version})
 
 # data-core
 FILE(COPY data-core DESTINATION .)
-INSTALL(DIRECTORY data-core DESTINATION ${product}/${version})
+INSTALL(DIRECTORY data-core DESTINATION .)
 
 cet_cmake_config()

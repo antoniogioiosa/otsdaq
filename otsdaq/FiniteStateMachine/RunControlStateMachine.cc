@@ -19,13 +19,13 @@
 
 using namespace ots;
 
-const std::string RunControlStateMachine::FAILED_STATE_NAME  = "Failed";
+const std::string RunControlStateMachine::FAILED_STATE_NAME  = FiniteStateMachine::FAILED_STATE_NAME;
 const std::string RunControlStateMachine::HALTED_STATE_NAME  = "Halted";
 const std::string RunControlStateMachine::PAUSED_STATE_NAME  = "Paused";
 const std::string RunControlStateMachine::RUNNING_STATE_NAME = "Running";
 
 const std::string RunControlStateMachine::SHUTDOWN_TRANSITION_NAME = "Shutdown";
-const std::string RunControlStateMachine::STARTUP_TRANSITION_NAME = "Startup";
+const std::string RunControlStateMachine::STARTUP_TRANSITION_NAME  = "Startup";
 
 //==============================================================================
 RunControlStateMachine::RunControlStateMachine(const std::string& name)
@@ -54,14 +54,17 @@ RunControlStateMachine::RunControlStateMachine(const std::string& name)
 	//clang-format off
 	// this line was added to get out of Failed state
 	RunControlStateMachine::addStateTransition('F', 'H', "Halt", "Halting", this, &RunControlStateMachine::transitionHalting);
-	RunControlStateMachine::addStateTransition('F', 'X', RunControlStateMachine::SHUTDOWN_TRANSITION_NAME, "Shutting Down", this, &RunControlStateMachine::transitionShuttingDown);
+	RunControlStateMachine::addStateTransition(
+	    'F', 'X', RunControlStateMachine::SHUTDOWN_TRANSITION_NAME, "Shutting Down", this, &RunControlStateMachine::transitionShuttingDown);
 	RunControlStateMachine::addStateTransition('F', 'F', "Error", "Erroring", this, &RunControlStateMachine::transitionShuttingDown);
 	RunControlStateMachine::addStateTransition('F', 'F', "Fail", "Failing", this, &RunControlStateMachine::transitionShuttingDown);
 
 	RunControlStateMachine::addStateTransition(
 	    'H', 'C', "Configure", "Configuring", "ConfigurationAlias", this, &RunControlStateMachine::transitionConfiguring);
-	RunControlStateMachine::addStateTransition('H', 'X', RunControlStateMachine::SHUTDOWN_TRANSITION_NAME, "Shutting Down", this, &RunControlStateMachine::transitionShuttingDown);
-	RunControlStateMachine::addStateTransition('X', 'I', RunControlStateMachine::STARTUP_TRANSITION_NAME, "Starting Up", this, &RunControlStateMachine::transitionStartingUp);
+	RunControlStateMachine::addStateTransition(
+	    'H', 'X', RunControlStateMachine::SHUTDOWN_TRANSITION_NAME, "Shutting Down", this, &RunControlStateMachine::transitionShuttingDown);
+	RunControlStateMachine::addStateTransition(
+	    'X', 'I', RunControlStateMachine::STARTUP_TRANSITION_NAME, "Starting Up", this, &RunControlStateMachine::transitionStartingUp);
 
 	// Every state can transition to halted
 	RunControlStateMachine::addStateTransition('I', 'H', "Initialize", "Initializing", this, &RunControlStateMachine::transitionInitializing);
@@ -312,8 +315,18 @@ xoap::MessageReference RunControlStateMachine::runControlMessageHandler(xoap::Me
 		return SOAPUtilities::makeSOAPMessageReference(result);
 	}
 
+	if(command == "Halt" && currentState == RunControlStateMachine::FAILED_STATE_NAME)
+	{
+		__GEN_COUT__ << "Clearing Errors after failure..." << std::endl;
+		theStateMachine_.setErrorMessage("", false /*append*/);  // clear error message
+		asyncFailureReceived_ = false;
+	}
+
 	__GEN_COUTV__(command);
 	__GEN_COUTV__(currentState);
+	__GEN_COUTV__(asyncFailureReceived_);
+	__GEN_COUTV__(asyncPauseExceptionReceived_);
+	__GEN_COUTV__(asyncStopExceptionReceived_);
 	__GEN_COUTV__(getErrorMessage());
 	__GEN_COUTV__(retransmittedCommand);
 

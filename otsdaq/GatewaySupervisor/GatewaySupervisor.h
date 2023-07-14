@@ -7,8 +7,8 @@
 #include "otsdaq/GatewaySupervisor/Iterator.h"
 #include "otsdaq/SOAPUtilities/SOAPMessenger.h"
 #include "otsdaq/SupervisorInfo/AllSupervisorInfo.h"
-//#include "otsdaq/SystemMessenger/SystemMessenger.h"
-//#include "otsdaq/TableCore/TableGroupKey.h"
+// #include "otsdaq/SystemMessenger/SystemMessenger.h"
+// #include "otsdaq/TableCore/TableGroupKey.h"
 #include "otsdaq/WebUsersUtilities/WebUsers.h"
 #include "otsdaq/WorkLoopManager/WorkLoopManager.h"
 
@@ -20,7 +20,7 @@
 #include <xdaq/Application.h>
 #pragma GCC diagnostic pop
 #include "otsdaq/Macros/XDAQApplicationMacros.h"
-//#include <toolbox/fsm/FiniteStateMachine.h>
+// #include <toolbox/fsm/FiniteStateMachine.h>
 #include <toolbox/task/WorkLoop.h>
 #include <xdata/String.h>
 #include <xgi/Method.h>
@@ -264,7 +264,7 @@ class WorkLoopManager;
 		WorkLoopManager 	stateMachineWorkLoopManager_;
 		toolbox::BSem   	stateMachineSemaphore_;
 
-		std::string 		activeStateMachineName_;  // when multiple state machines, this is the name of the state machine which executed theconfigure transition
+		std::string 		activeStateMachineName_;  // when multiple state machines, this is the name of the state machine which executed the configure transition
 		std::string 		activeStateMachineWindowName_;
 		std::string			activeStateMachineLogEntry_;
 		std::string 		activeStateMachineRunNumber_;
@@ -294,6 +294,8 @@ class WorkLoopManager;
 		std::mutex   		broadcastIterationBreakpointMutex_;
 		unsigned int 		broadcastIterationBreakpoint_;  // pause transition when iteration index
 													 // matches breakpoint index
+		std::mutex			broadcastCommandStatusUpdateMutex_;
+		std::string			broadcastCommandStatus_;
 
 		// temporary member variable to avoid redeclaration in repetitive functions
 		char 				tmpStringForConversions_[100];

@@ -182,9 +182,9 @@ std::string StringMacros::escapeString(std::string inString, bool allowWhiteSpac
 					if(allowWhiteSpace)
 					{
 						sprintf(htmlTmp, "&#%3.3d", inString[i]);
-						inString.insert(i, std::string(htmlTmp));         // insert html str sequence
-						inString.replace(i + 5, 1, 1, ';');  // replace special character with ;
-						i += 6;                              // skip to next char to check
+						inString.insert(i, std::string(htmlTmp));  // insert html str sequence
+						inString.replace(i + 5, 1, 1, ';');        // replace special character with ;
+						i += 6;                                    // skip to next char to check
 						--i;
 					}
 					else  // translate to ' '
@@ -200,16 +200,16 @@ std::string StringMacros::escapeString(std::string inString, bool allowWhiteSpac
 							// tab = 8 spaces
 							sprintf(htmlTmp, "&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160");
 							inString.insert(i, std::string(htmlTmp));  // insert html str sequence
-							inString.replace(i + 47, 1, 1, ';');  // replace special character with ;
-							i += 48;                              // skip to next char to check
+							inString.replace(i + 47, 1, 1, ';');       // replace special character with ;
+							i += 48;                                   // skip to next char to check
 							--i;
 						}
 						else  // tab =  0x09
 						{
 							sprintf(htmlTmp, "&#009");
 							inString.insert(i, std::string(htmlTmp));  // insert html str sequence
-							inString.replace(i + 5, 1, 1, ';');  // replace special character with ;
-							i += 6;                              // skip to next char to check
+							inString.replace(i + 5, 1, 1, ';');        // replace special character with ;
+							i += 6;                                    // skip to next char to check
 							--i;
 						}
 					}
@@ -255,8 +255,8 @@ std::string StringMacros::escapeString(std::string inString, bool allowWhiteSpac
 			{
 				sprintf(htmlTmp, "&#%3.3d", inString[i]);
 				inString.insert(i, std::string(htmlTmp));  // insert html number sequence
-				inString.replace(i + 5, 1, 1, ';');  // replace special character with ;
-				i += 5;                              // skip to next char to check
+				inString.replace(i + 5, 1, 1, ';');        // replace special character with ;
+				i += 5;                                    // skip to next char to check
 			}
 
 			if(doit)
@@ -933,7 +933,7 @@ bool StringMacros::extractCommonChunks(const std::vector<std::string>& haystack,
 			else
 				break;
 		}
-	__COUT__ << "Low side = " << wildcardBounds.first << " " << haystack[0].substr(0, wildcardBounds.first) << __E__;
+	// __COUT__ << "Low side = " << wildcardBounds.first << " " << haystack[0].substr(0, wildcardBounds.first) << __E__;
 
 	// look for end matching segment
 	for(unsigned int n = 1; n < haystack.size(); ++n)
@@ -951,7 +951,7 @@ bool StringMacros::extractCommonChunks(const std::vector<std::string>& haystack,
 				break;
 		}
 
-	__COUT__ << "High side = " << wildcardBounds.second << " " << haystack[0].substr(wildcardBounds.second) << __E__;
+	// __COUT__ << "High sibbde = " << wildcardBounds.second << " " << haystack[0].substr(wildcardBounds.second) << __E__;
 
 	// add first common chunk
 	commonChunksToReturn.push_back(haystack[0].substr(0, wildcardBounds.first));
@@ -1024,7 +1024,7 @@ bool StringMacros::extractCommonChunks(const std::vector<std::string>& haystack,
 				__SS_THROW__;
 			}
 		}
-		__COUTV__(fixedWildcardLength);
+		// __COUTV__(fixedWildcardLength);
 
 		if(fixedWildcardLength)  // take trailing 0s out of common chunks
 			for(unsigned int c = 0; c < commonChunksToReturn.size(); ++c)
@@ -1059,15 +1059,15 @@ bool StringMacros::extractCommonChunks(const std::vector<std::string>& haystack,
 				if(wildcard == "")
 				{
 					// set wildcard for first time
-					__COUTV__(i);
-					__COUTV__(k);
-					__COUTV__(k - i);
+					// __COUTV__(i);
+					// __COUTV__(k);
+					// __COUTV__(k - i);
 
 					wildcard = haystack[n].substr(i, k - i);
 					if(fixedWildcardLength && n == 0)
 						fixedWildcardLength += wildcard.size();
 
-					__COUT__ << "name[" << n << "] = " << wildcard << " fixed @ " << fixedWildcardLength << __E__;
+					// __COUT__ << "name[" << n << "] = " << wildcard << " fixed @ " << fixedWildcardLength << __E__;
 
 					break;
 				}
@@ -1087,8 +1087,8 @@ bool StringMacros::extractCommonChunks(const std::vector<std::string>& haystack,
 
 	}  // end name loop
 
-	__COUTV__(StringMacros::vectorToString(commonChunksToReturn));
-	__COUTV__(StringMacros::vectorToString(wildcardStringsToReturn));
+	// __COUTV__(StringMacros::vectorToString(commonChunksToReturn));
+	// __COUTV__(StringMacros::vectorToString(wildcardStringsToReturn));
 
 	if(wildcardStringsToReturn.size() != haystack.size())
 	{
@@ -1171,7 +1171,7 @@ std::string StringMacros::exec(const char* cmd)
 //	https://gist.github.com/fmela/591333/c64f4eb86037bb237862a8283df70cdfc25f01d3
 #include <cxxabi.h>    //for abi::__cxa_demangle
 #include <execinfo.h>  //for back trace of stack
-//#include "TUnixSystem.h"
+// #include "TUnixSystem.h"
 std::string StringMacros::stackTrace()
 {
 	__SS__ << "ots::stackTrace:\n";

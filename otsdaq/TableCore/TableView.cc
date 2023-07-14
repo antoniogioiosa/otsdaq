@@ -422,8 +422,7 @@ void TableView::init(void)
 		bool                                                               tmpIsGroup;
 		std::pair<unsigned int /*link col*/, unsigned int /*link id col*/> tmpLinkPair;
 
-
-		//check sanity of data view rows x cols (have seen weird out-of-range crashes)
+		// check sanity of data view rows x cols (have seen weird out-of-range crashes)
 		if(getNumberOfRows() != theDataView_.size())
 		{
 			__SS__ << "Impossible row mismatch " << getNumberOfRows() << " vs " << theDataView_.size() << "! How did you get here?" << __E__;
@@ -432,7 +431,8 @@ void TableView::init(void)
 		for(unsigned int row = 0; row < getNumberOfRows(); ++row)
 			if(getNumberOfColumns() != theDataView_[row].size())
 			{
-				__SS__ << "Impossible col mismatch " << getNumberOfColumns() << " vs [" << row << "]" << theDataView_[row].size() << "! How did you get here?" << __E__;
+				__SS__ << "Impossible col mismatch " << getNumberOfColumns() << " vs [" << row << "]" << theDataView_[row].size() << "! How did you get here?"
+				       << __E__;
 				__SS_THROW__;
 			}
 		if(getNumberOfColumns() != columnsInfo_.size())
@@ -933,11 +933,8 @@ const std::string& TableView::setUniqueColumnValue(unsigned int row,
 		__SS_THROW__;
 	}
 
-	//			__COUT__ << "Current unique data entry is data[" << rowToAdd
-	//					<< "][" << col << "] = '" << theDataView_[rowToAdd][col]
-	//<<
-	//"'"
-	//			         << __E__;
+	__COUT__ << "Current unique data entry is data[" << row << "][" << col << "] = '" << theDataView_[row][col] << "' baseValueAsString = " << baseValueAsString
+	         << " doMathAppendStrategy = " << doMathAppendStrategy << __E__;
 
 	bool         firstConflict = true;
 	int          maxUniqueData = -1;
@@ -1908,7 +1905,7 @@ void TableView::reset(void)
 {
 	version_ = -1;
 	comment_ = "";
-	author_ + "";
+	author_  = "";
 	columnsInfo_.clear();
 	theDataView_.clear();
 }  // end reset()

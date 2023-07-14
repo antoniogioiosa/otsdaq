@@ -120,8 +120,8 @@ ARTDAQSupervisor::ARTDAQSupervisor(xdaq::ApplicationStub* stub)
 	init_sighandler(this);
 
 	// Only use system Python
-	unsetenv("PYTHONPATH");
-	unsetenv("PYTHONHOME");
+	// unsetenv("PYTHONPATH");
+	// unsetenv("PYTHONHOME");
 
 	// Write out settings file
 	auto          settings_file = __ENV__("DAQINTERFACE_SETTINGS");
@@ -146,9 +146,10 @@ ARTDAQSupervisor::ARTDAQSupervisor(xdaq::ApplicationStub* stub)
 	o << "eventbuilder timeout: " << getSupervisorProperty("eventbuilder_timeout", 30) << std::endl;
 	o << "datalogger timeout: " << getSupervisorProperty("datalogger_timeout", 30) << std::endl;
 	o << "dispatcher timeout: " << getSupervisorProperty("dispatcher_timeout", 30) << std::endl;
-	if(getSupervisorProperty("advanced_memory_usage", false))
+	// Only put max_fragment_size_bytes into DAQInterface settings file if advanced_memory_usage is disabled
+	if(!getSupervisorProperty("advanced_memory_usage", false))
 	{
-		//		o << "max_fragment_size_bytes: " << getSupervisorProperty("max_fragment_size_bytes", 1048576) << std::endl;
+		o << "max_fragment_size_bytes: " << getSupervisorProperty("max_fragment_size_bytes", 1048576) << std::endl;
 	}
 	o << "transfer_plugin_to_use: " << getSupervisorProperty("transfer_plugin_to_use", "Autodetect") << std::endl;
 	o << "all_events_to_all_dispatchers: " << std::boolalpha << getSupervisorProperty("all_events_to_all_dispatchers", true) << std::endl;
@@ -156,7 +157,9 @@ ARTDAQSupervisor::ARTDAQSupervisor(xdaq::ApplicationStub* stub)
 	o << "max_configurations_to_list: " << getSupervisorProperty("max_configurations_to_list", 10) << std::endl;
 	o << "disable_unique_rootfile_labels: " << getSupervisorProperty("disable_unique_rootfile_labels", false) << std::endl;
 	o << "use_messageviewer: " << std::boolalpha << getSupervisorProperty("use_messageviewer", false) << std::endl;
+	o << "use_messagefacility: " << std::boolalpha << getSupervisorProperty("use_messagefacility", true) << std::endl;
 	o << "fake_messagefacility: " << std::boolalpha << getSupervisorProperty("fake_messagefacility", false) << std::endl;
+	o << "kill_existing_processes: " << std::boolalpha << getSupervisorProperty("kill_existing_processes", true) << std::endl;
 	o << "advanced_memory_usage: " << std::boolalpha << getSupervisorProperty("advanced_memory_usage", false) << std::endl;
 	o << "disable_private_network_bookkeeping: " << std::boolalpha << getSupervisorProperty("disable_private_network_bookkeeping", false) << std::endl;
 	o << "allowed_processors: " << getSupervisorProperty("allowed_processors", "0-255")
@@ -173,6 +176,7 @@ ARTDAQSupervisor::ARTDAQSupervisor(xdaq::ApplicationStub* stub)
 	}
 	CorePropertySupervisorBase::theTRACEController_ = new ARTDAQSupervisorTRACEController();
 	((ARTDAQSupervisorTRACEController*)CorePropertySupervisorBase::theTRACEController_)->setSupervisorPtr(this);
+
 	__SUP_COUT__ << "Constructed." << __E__;
 }  // end constructor()
 
@@ -312,6 +316,26 @@ void ARTDAQSupervisor::init(void)
 		}
 
 		getDAQState_();
+
+		// { //attempt to cleanup old artdaq processes DOES NOT WORK because artdaq interface knows it hasn't started
+		// 	__SUP_COUT__ << "Attempting artdaq stale cleanup..." << __E__;
+		// 	std::lock_guard<std::recursive_mutex> lk(daqinterface_mutex_);
+		// 	getDAQState_();
+		// 	__SUP_COUT__ << "Status before cleanup: " << daqinterface_state_ << __E__;
+
+		// 	PyObject* pName = PyUnicode_FromString("do_recover");
+		// 	PyObject* res   = PyObject_CallMethodObjArgs(daqinterface_ptr_, pName, NULL);
+
+		// 	if(res == NULL)
+		// 	{
+		// 		PyErr_Print();
+		// 		__SS__ << "Error with clean up calling do_recover" << __E__;
+		// 		__SUP_SS_THROW__;
+		// 	}
+		// 	getDAQState_();
+		// 	__SUP_COUT__ << "Status after cleanup: " << daqinterface_state_ << __E__;
+		// 	__SUP_COUT__ << "cleanup DONE." << __E__;
+		// }
 	}
 	start_runner_();
 	__SUP_COUT__ << "Initialized." << __E__;
@@ -342,7 +366,7 @@ void ARTDAQSupervisor::transitionConfiguring(toolbox::Event::Reference /*event*/
 
 		__SUP_COUT__ << "Configuring thread started." << __E__;
 
-		RunControlStateMachine::indicateSubIterationWork();
+		RunControlStateMachine::indicateIterationWork();  // use Iteration to allow other steps to complete in the system
 	}
 	else  // not first time
 	{
@@ -382,7 +406,7 @@ void ARTDAQSupervisor::transitionConfiguring(toolbox::Event::Reference /*event*/
 
 		if(!thread_progress_bar_.isComplete())
 		{
-			RunControlStateMachine::indicateSubIterationWork();
+			RunControlStateMachine::indicateIterationWork();  // use Iteration to allow other steps to complete in the system
 
 			if(last_thread_progress_read_ != progress)
 			{
@@ -406,7 +430,7 @@ void ARTDAQSupervisor::transitionConfiguring(toolbox::Event::Reference /*event*/
 void ARTDAQSupervisor::configuringThread()
 try
 {
-	const std::string& uid =
+	std::string uid =
 	    theConfigurationManager_
 	        ->getNode(ConfigurationManager::XDAQ_APPLICATION_TABLE_NAME + "/" + CorePropertySupervisorBase::getSupervisorUID() + "/" + "LinkToSupervisorTable")
 	        .getValueAsString();
@@ -594,15 +618,20 @@ try
 	{
 		PyObject* readerName = PyUnicode_FromString(reader.label.c_str());
 
-		PyObject* readerData              = PyList_New(4);
-		PyObject* readerHost              = PyUnicode_FromString(reader.hostname.c_str());
-		PyObject* readerPort              = PyUnicode_FromString("-1");
-		PyObject* readerSubsystem         = PyUnicode_FromString(std::to_string(reader.subsystem).c_str());
-		PyObject* readerAllowedProcessors = PyUnicode_FromString(reader.allowed_processors.c_str());
+		int list_size = reader.allowed_processors != "" ? 4 : 3;
+
+		PyObject* readerData      = PyList_New(list_size);
+		PyObject* readerHost      = PyUnicode_FromString(reader.hostname.c_str());
+		PyObject* readerPort      = PyUnicode_FromString("-1");
+		PyObject* readerSubsystem = PyUnicode_FromString(std::to_string(reader.subsystem).c_str());
 		PyList_SetItem(readerData, 0, readerHost);
 		PyList_SetItem(readerData, 1, readerPort);
 		PyList_SetItem(readerData, 2, readerSubsystem);
-		PyList_SetItem(readerData, 3, readerAllowedProcessors);
+		if(reader.allowed_processors != "")
+		{
+			PyObject* readerAllowedProcessors = PyUnicode_FromString(reader.allowed_processors.c_str());
+			PyList_SetItem(readerData, 3, readerAllowedProcessors);
+		}
 		PyDict_SetItem(readerDict, readerName, readerData);
 	}
 	PyObject* res1 = PyObject_CallMethodObjArgs(daqinterface_ptr_, pName1, readerDict, NULL);
@@ -718,6 +747,20 @@ try
 	std::lock_guard<std::recursive_mutex> lk(daqinterface_mutex_);
 	getDAQState_();
 	__SUP_COUT__ << "Status before halt: " << daqinterface_state_ << __E__;
+
+	if(daqinterface_state_ == "running")
+	{
+		// First stop before halting
+		PyObject* pName = PyUnicode_FromString("do_stop_running");
+		PyObject* res   = PyObject_CallMethodObjArgs(daqinterface_ptr_, pName, NULL);
+
+		if(res == NULL)
+		{
+			PyErr_Print();
+			__SS__ << "Error calling stop transition" << __E__;
+			__SUP_SS_THROW__;
+		}
+	}
 
 	PyObject* pName = PyUnicode_FromString("do_command");
 	PyObject* pArg  = PyUnicode_FromString("Shutdown");
@@ -904,7 +947,7 @@ try
 
 		__SUP_COUT__ << "Starting thread started." << __E__;
 
-		RunControlStateMachine::indicateSubIterationWork();
+		RunControlStateMachine::indicateIterationWork();  // use Iteration to allow other steps to complete in the system
 	}
 	else  // not first time
 	{
@@ -944,7 +987,7 @@ try
 
 		if(!thread_progress_bar_.isComplete())
 		{
-			RunControlStateMachine::indicateSubIterationWork();
+			RunControlStateMachine::indicateIterationWork();  // use Iteration to allow other steps to complete in the system
 
 			if(last_thread_progress_read_ != progress)
 			{
@@ -980,7 +1023,7 @@ catch(...)
 void ARTDAQSupervisor::startingThread()
 try
 {
-	const std::string& uid =
+	std::string uid =
 	    theConfigurationManager_
 	        ->getNode(ConfigurationManager::XDAQ_APPLICATION_TABLE_NAME + "/" + CorePropertySupervisorBase::getSupervisorUID() + "/" + "LinkToSupervisorTable")
 	        .getValueAsString();
